@@ -304,7 +304,7 @@ int main(int argc, char* argv[]){
                         printf("Error message sending failed\n");
                         exit(1);
                     }
-                    removeSocket(s_queue->head->sock, s_queue);
+                    removeSocket(s_queue->head, s_queue);
                     // Remove socket and stuff here
                 }   
                 else 
