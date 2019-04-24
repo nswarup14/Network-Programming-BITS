@@ -126,6 +126,7 @@ void childClientProcess(int N, int M, int T, char* childName){
             bytesRcvd = read(socketfd, recv_buff, BUFFER_SIZE);
             if(bytesRcvd < 0){
                 perror("Read error in client");
+                break;
             }
             char msgType[5];
             msgType[0] = recv_buff[0];
@@ -137,10 +138,13 @@ void childClientProcess(int N, int M, int T, char* childName){
                 printf("Received UMSG\n");
             }
             else if(strcmp(msgType, "BMSG") == 0){
-                printf("Received BMSG %s\n", recv_buff);
+                
+                char* temp_buf = recv_buff+4;
+                printf("Received BMSG %s\n", temp_buf);
             }
             else if(strcmp(msgType, "LIST") == 0){
-                printf("Received LIST %s\n", recv_buff);
+                char* temp_buf = recv_buff+4;
+                printf("Received LIST %s\n", temp_buf);
             }
         }
     }
@@ -161,12 +165,12 @@ void childClientProcess(int N, int M, int T, char* childName){
         }
 
         // Send LIST message
-        strcpy(send_buff, listMsg);
-        bytesSent = write(socketfd, send_buff, strlen(send_buff));
-        if(bytesSent < 0){
-            printf("Error while Sending");
-            exit(1);
-        }
+        // strcpy(send_buff, listMsg);
+        // bytesSent = write(socketfd, send_buff, strlen(send_buff));
+        // if(bytesSent < 0){
+        //     printf("Error while Sending");
+        //     exit(1);
+        // }
         for(int i=1; i<4;i++){
             strcpy(send_buff, bmsgMsg);
             strcat(send_buff, bmsgs[0]);

@@ -58,15 +58,14 @@ void removeClient(int socketfd){
 
 void strEcho(int socketfd){
     int readSize;
-    char* recv_buf;
+    char recv_buf[BUFFER_SIZE];
     int endOfMsg = 1;
     int bytesRead = 0;
     while(1){
         if(endOfMsg == 1){
             bytesRead = 0;
             endOfMsg = 0;
-            recv_buf = (char*)malloc(sizeof(char)*BUFFER_SIZE);
-            readSize = recv(socketfd, recv_buf, BUFFER_SIZE, 0);
+            readSize = read(socketfd, recv_buf, BUFFER_SIZE);
             if(readSize < 0){
                 perror("Issue in reading the message");
                 exit(1);
@@ -102,6 +101,7 @@ void strEcho(int socketfd){
             }
             else
             {
+                printf("Reached the end in JOIN\n");
                 endOfMsg = 1;
             }
             

@@ -276,6 +276,8 @@ int main(int argc, char* argv[]){
         int response;
         if(s_queue->soc_count != 0){
             // printf("%d\n", s_queue->max_soc+1);
+            timeout.tv_sec = TIMEOUT - (clock()-s_queue->head->sentAt)/CLOCKS_PER_SEC;
+            // printf("%li\n", timeout.tv_sec);
             response = select(s_queue->max_soc+1, &readfds, NULL, NULL, &timeout);
         }
         else
@@ -393,8 +395,8 @@ int main(int argc, char* argv[]){
                         }
                     }
                     else{
-                        resendPacket(temp_sock);
-                        pushQueue(s_queue);
+                        // resendPacket(temp_sock);
+                        // pushQueue(s_queue);
                     }
                 }
                 else if(temp_sock->recv_buffer[1] == ERR){
@@ -408,11 +410,6 @@ int main(int argc, char* argv[]){
                 if(termFlag==0)
                     memset(temp_sock->recv_buffer, 0, sizeof(temp_sock->recv_buffer));
             }
-        }
-        if(s_queue->soc_count != 0){
-            //printf("yo\n");
-            timeout.tv_sec = TIMEOUT - (clock()-s_queue->head->sentAt)/CLOCKS_PER_SEC;
-            // printf("%li\n", timeout.tv_sec);
         }
     }
 }

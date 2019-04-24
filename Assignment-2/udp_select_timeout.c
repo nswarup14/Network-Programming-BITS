@@ -22,6 +22,8 @@
 #define TIMEOUT 5
 #define BUFFER_SIZE 516
 #define MAX_CLIENTS 10
+#define ALPHA 0.125
+#define BETA 0.25
 
 typedef enum 
 { 
@@ -47,7 +49,11 @@ typedef struct _socket{
     unsigned short int block_no;
     int endFileFlag;
     FILE* fp;
-    clock_t irtt;
+    double irtt;
+    double id;
+    double tot;
+    double ad;
+    double artt;
     
 }Socket;
 
@@ -154,6 +160,18 @@ void substring(char s[], char sub[], int p, int l) {
       c++;
    }
    sub[c] = '\0';
+}
+
+int findMinTot(SocketQueue* s_queue){
+    Socket* temp = s_queue->head;
+    double minVal = 10000000.0;
+    while(temp != NULL){
+        if(temp->tot <= minVal){
+            minVal = temp->tot;
+        }
+        temp = temp->next;
+    }
+    return minVal;
 }
 
 void removeSockNumber(int socketfd){
@@ -276,6 +294,9 @@ int main(int argc, char* argv[]){
         int response;
         if(s_queue->soc_count != 0){
             // printf("%d\n", s_queue->max_soc+1);
+            double minTot = findMinTot(s_queue);
+            timeout.tv_sec = minTot; 
+            // printf("%li\n", timeout.tv_sec);
             response = select(s_queue->max_soc+1, &readfds, NULL, NULL, &timeout);
         }
         else
@@ -301,9 +322,11 @@ int main(int argc, char* argv[]){
                     removeSocket(s_queue->head, s_queue);
                     // Remove socket and stuff here
                 }   
-                else 
+                else{
+                    s_queue->head->tot = 2*s_queue->head->tot;
                     resendPacket(s_queue->head);
                     pushQueue(s_queue);
+                }
             }  
         }
         else if(response > 0){
@@ -333,7 +356,8 @@ int main(int argc, char* argv[]){
                 node->block_no = 0;
                 node->endFileFlag = 0;
                 node->fp = NULL;
-                
+                node->irtt = 1;
+                node->id = 0.1;
                 //Get Filename from RRQ
                 char filename[BUFFER_SIZE];
                 extractName(listenfd_input, filename);
@@ -359,6 +383,7 @@ int main(int argc, char* argv[]){
                 printf("Start Transferring\n");
                 // Send first packet
                 sendPacket(node);
+                node->tot = 4*node->id+ node->irtt;
                 //Close the streams and open stuff.
                 memset(&si_other, 0, sizeof(si_other));
                 memset(listenfd_input, 0, sizeof(listenfd_input));
@@ -388,13 +413,21 @@ int main(int argc, char* argv[]){
                             removeSocket(temp_sock, s_queue);
                         }
                         else{
+                            clock_t now = clock();
+                            temp_sock->artt = now - temp_sock->sentAt;
+                            temp_sock->ad = abs(temp_sock->artt - temp_sock->irtt);
                             sendPacket(temp_sock);
                             pushQueue(s_queue);
+                            if(temp_sock->resends == 0){
+                                temp_sock->irtt = ALPHA * temp_sock->irtt + (1-ALPHA)*temp_sock->artt;
+                                temp_sock->id = BETA*temp_sock->id + (1-BETA)*temp_sock->ad;
+                                temp_sock->tot = 4*temp_sock->id + temp_sock->irtt;
+                            }
                         }
                     }
                     else{
-                        resendPacket(temp_sock);
-                        pushQueue(s_queue);
+                        // resendPacket(temp_sock);
+                        // pushQueue(s_queue);
                     }
                 }
                 else if(temp_sock->recv_buffer[1] == ERR){
@@ -408,11 +441,6 @@ int main(int argc, char* argv[]){
                 if(termFlag==0)
                     memset(temp_sock->recv_buffer, 0, sizeof(temp_sock->recv_buffer));
             }
-        }
-        if(s_queue->soc_count != 0){
-            //printf("yo\n");
-            timeout.tv_sec = TIMEOUT - (clock()-s_queue->head->sentAt)/CLOCKS_PER_SEC;
-            // printf("%li\n", timeout.tv_sec);
         }
     }
 }
