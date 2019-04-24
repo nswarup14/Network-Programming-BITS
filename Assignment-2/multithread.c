@@ -1,5 +1,7 @@
 // P_Threads
 // Compiling gcc pthread.c -lpthread
+// Discuss what else can be added to this
+// (i) Leaving and Joining Messages?
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -56,65 +58,109 @@ void removeClient(int socketfd){
 
 void strEcho(int socketfd){
     int readSize;
-    char recv_buf[BUFFER_SIZE];
-    while((readSize = read(socketfd, recv_buf, BUFFER_SIZE)) > 0){
-        char msgType[5];
-        msgType[0] = recv_buf[0];
-        msgType[1] = recv_buf[1];
-        msgType[2] = recv_buf[2];
-        msgType[3] = recv_buf[3];
+    char* recv_buf;
+    int endOfMsg = 1;
+    int bytesRead = 0;
+    while(1){
+        if(endOfMsg == 1){
+            bytesRead = 0;
+            endOfMsg = 0;
+            recv_buf = (char*)malloc(sizeof(char)*BUFFER_SIZE);
+            readSize = recv(socketfd, recv_buf, BUFFER_SIZE, 0);
+            if(readSize < 0){
+                perror("Issue in reading the message");
+                exit(1);
+            }
+        }
+        char msgType[NAME_SIZE];
+        msgType[0] = recv_buf[bytesRead];
+        msgType[1] = recv_buf[bytesRead+1];
+        msgType[2] = recv_buf[bytesRead+2];
+        msgType[3] = recv_buf[bytesRead+3];
         msgType[4] = '\0';
-
+        bytesRead = bytesRead + 4;
+        //printf("asdasd%s\n", recv_buf);
         if(strcmp(msgType, "JOIN") == 0){
+            printf("Total Message Size %d\n", readSize);
             // Extract name
             char name[NAME_SIZE];
-            char ch = recv_buf[4];
-            int count = 0;
-            while(ch != '\r'){
-                name[count] = ch;
-                count++;
-                ch = recv_buf[4+count];
+            int count;
+            int temp = bytesRead;
+            for(count = bytesRead;count<readSize;count++){
+                if(recv_buf[count] == '\r'){  
+                    break;
+                }
+                name[count-temp] = recv_buf[count];
+                bytesRead++;
             }
-            pthread_mutex_trylock(&clients_mutex);
+            bytesRead += 2;
+            if(bytesRead != readSize){
+                // printf("Read size %d\n", bytesRead);
+                // printf("Message size %d\n", readSize);
+                printf("Did not reach the end in JOIN\n");
+                endOfMsg = 0;
+            }
+            else
+            {
+                endOfMsg = 1;
+            }
+            
+            pthread_mutex_lock(&clients_mutex);
             for(int i=0; i<clientID;i++){
                 Client* temp = queue[i];
                 if(temp->socket == socketfd){
                     strcpy(temp->name, name);
                 }
             }
-            pthread_mutex_unlock(&clients_mutex);   
-        }
-        else if(strcmp(msgType, "LIST") == 0){
-            char send_buf[BUFFER_SIZE];
-            send_buf[0] = 'L';
-            send_buf[1] = 'I';
-            send_buf[2] = 'S';
-            send_buf[3] = 'T';
-            int count = 4;
-            pthread_mutex_trylock(&clients_mutex);
-            for(int i=0;i<clientID; i++){
-                Client* temp = queue[i];
-                char temp_name[BUFFER_SIZE];
-                strcpy(temp_name, temp->name);
-                char ch = temp_name[0];
-                int int_count = 0;
-                while(ch != '\0'){
-                    send_buf[count] = ch;
-                    int_count++;
-                    count++;
-                    ch = temp_name[int_count];
-                }
-                send_buf[count] = '\0';
-                count++;
-            }
+            printf("New Connection Accepted from %s\n", name);
             pthread_mutex_unlock(&clients_mutex);
-            int sent = write(socketfd, send_buf, count);
+            printf("\n");   
+        }
+
+        else if(strcmp(msgType, "LIST") == 0){
+            printf("\n");
+            bytesRead += 2;
+            if(bytesRead != readSize){
+                // printf("Read size %d\n", bytesRead);
+                // printf("Message size%d\n", readSize);
+                printf("Did not reach the end in LIST\n");
+                endOfMsg = 0;
+            }
+            else
+            {
+                printf("Reached the end in LIST\n");
+                endOfMsg = 1;
+            }
+            char send_buf[BUFFER_SIZE];
+            char name[NAME_SIZE];
+            strcpy(send_buf, "LIST|");
+            pthread_mutex_lock(&clients_mutex);
+            for(int i =0;i<clientID;i++){
+                Client* cli = queue[i];
+                if(cli->socket == socketfd){
+                    strcpy(name, cli->name);
+                }
+                Client* temp = queue[i];
+                char temp_name[NAME_SIZE];
+                strcpy(temp_name, temp->name);
+                strcat(temp_name,"|");
+                strcat(send_buf, temp_name);
+            }
+            strcat(send_buf,"\r\n");
+            printf("Received LIST from %s\n", name);
+            pthread_mutex_unlock(&clients_mutex);
+            // printf("%d\n", socketfd);
+            // printf("%d\n", queue[0]->socket);
+            int sent = write(socketfd, send_buf, strlen(send_buf));
             if(sent < 0){
                 printf("Write failed in LIST\n");
                 exit(1);
             }
+            printf("\n");
         }
+
         else if(strcmp(msgType, "UMSG") == 0){
+            printf("\n");
             char send_buf[BUFFER_SIZE];
             int count = 0;
             char tname[NAME_SIZE];
@@ -124,7 +170,7 @@ void strEcho(int socketfd){
                 count++;
                 ch = recv_buf[4+count];
             }
-            pthread_mutex_trylock(&clients_mutex);
+            pthread_mutex_lock(&clients_mutex);
             int flag = 0;
             for(int i=0;i<clientID;i++){
                 Client* cli = queue[i];
@@ -138,6 +184,7 @@ void strEcho(int socketfd){
                     }
                 }
             }
+            printf("Received UMSG from %s\n", tname);
             pthread_mutex_unlock(&clients_mutex);
             if(flag == 0){
                 send_buf[0] = 'E';
@@ -160,25 +207,80 @@ void strEcho(int socketfd){
                     exit(1);
                 }
             }
+            printf("\n");
         }
+
         else if(strcmp(msgType, "BMSG") == 0){
+            printf("\n");
+            char send_buf[BUFFER_SIZE];            
+            strcpy(send_buf, "BMSG");
+            int count;
+            int temp = bytesRead;
+            char msg[BUFFER_SIZE];
+            for(count = bytesRead;count<readSize;count++){
+                if(recv_buf[count] == '\r')
+                    break;
+                msg[count-temp] = recv_buf[count];
+                bytesRead++;
+            }
+            strcat(send_buf, msg);
+            strcat(send_buf, "\r\n");
+            bytesRead += 2;
+            if(bytesRead != readSize){
+                // printf("Read size %d\n", bytesRead);
+                // printf("Message size %d\n", readSize);
+                printf("Did not reach the end in BMSG\n");
+                endOfMsg = 0;
+            }
+            else
+            {
+                printf("Reached the end in BMSG\n");
+                endOfMsg = 1;
+            }
             pthread_mutex_lock(&clients_mutex);
-            for(int i = 0; i<clientID; i++){
+            char name[NAME_SIZE];
+            for(int i =0;i<clientID;i++){
                 Client* cli = queue[i];
                 if(cli->socket == socketfd){
-                    continue;
-                }
-                if(write(cli->socket, recv_buf, BUFFER_SIZE) < 0){
-                    printf("Write failed in BSMG\n");
-                    exit(1);
+                    strcpy(name, cli->name);
                 }
             }
+            printf("Received BMSG from %s\n", name);
+            for(int i = 0; i<clientID; i++){
+                Client* cli = queue[i];
+                if(write(cli->socket, send_buf, (int)strlen(send_buf)) < 0){
+                    perror("Write failed in BMSG");
+                    exit(1);
+                }
+                printf("Sent Message %s BMSG\n", send_buf);
+            }
             pthread_mutex_unlock(&clients_mutex);
+            printf("\n");
         }
+
         else if(strcmp(msgType, "LEAV") == 0){
-            pthread_mutex_trylock(&clients_mutex);
+            printf("\n");
+            bytesRead += 2;
+            if(bytesRead != readSize){
+                endOfMsg = 0;
+            }
+            else
+            {
+                printf("Reached the end in LEAV\n");
+                endOfMsg = 1;
+            }
+            pthread_mutex_lock(&clients_mutex);
+            char name[NAME_SIZE];
+            for(int i =0;i<clientID;i++){
+                Client* cli = queue[i];
+                if(cli->socket == socketfd){
+                    strcpy(name, cli->name);
+                }
+            }
+            printf("Received LEAV from %s\n", name);
             removeClient(socketfd);
             pthread_mutex_unlock(&clients_mutex);
+            printf("\n");
         }
     }
 }
@@ -190,8 +292,7 @@ void *handleClient(void* args){
 
     pthread_detach(pthread_self());
     strEcho(connfd);
-    
-    close(connfd);
+    printf("asdasdasd\n");
     return(NULL);
 }
 
@@ -220,7 +321,7 @@ int main(int argc, char*argv[]){
         printf("Error in listening\n");
         exit(1);
     }
-    printf("Now listening on port %d..\n", PORT);
+    printf("Now listening on port %d..\n\n", PORT);
     bool server_running = true;
     pthread_t tid;
 
@@ -242,13 +343,12 @@ int main(int argc, char*argv[]){
         queue[clientID] = cli;
         clientID += 1;
 
-        printf("New Connection Accepted\n");
         if(pthread_create(&tid, NULL, &handleClient, cliSocket) > 0){
             printf("Error while creating a pthread_t\n");
             exit(1);
         }
-        sleep(1);
-        pthread_join(tid, NULL);
+        // sleep(1);
+        //pthread_join(tid, NULL);
     }
     return 0;
 }

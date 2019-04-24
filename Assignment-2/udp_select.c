@@ -52,6 +52,8 @@ typedef struct _socket{
     unsigned short int block_no;
     int endFileFlag;
     FILE* fp;
+    clock_t irtt;
+    
 }Socket;
 
 typedef struct _fd_queue{
@@ -82,20 +84,6 @@ static ErrPack errs[] ={
 
 int socks[MAX_CLIENTS];
 int no_clients = 0;
-
-void sendEmptyData(Socket* temp_sock){
-    temp_sock->send_buffer[0] = 0;
-    temp_sock->send_buffer[1] = DATA;
-    temp_sock->send_buffer[2] = temp_sock->block_no >> 8;
-    temp_sock->send_buffer[3] = temp_sock->block_no;
-    temp_sock->buffer_size = sizeof(temp_sock->send_buffer);
-    int sent = sendto(temp_sock->sock, temp_sock->send_buffer, temp_sock->buffer_size, 0, (struct sockaddr*)&temp_sock->si_other, sizeof(temp_sock->si_other));
-    if(sent < 0){
-        printf("Error while sending DATA packet\n");
-        exit(1);
-    }
-    temp_sock->sentAt = clock();
-}
 
 void sendPacket(Socket* temp_sock){
     // Create DATA packet to send
@@ -220,7 +208,23 @@ void removeSocket(Socket* temp_sock, SocketQueue* s_queue){
     free(head);
     removeSockNumber(temp_sock->sock);
     s_queue->soc_count -= 1;
+}
 
+void pushQueue(SocketQueue* s_queue){
+    Socket* head = s_queue->head;
+    Socket* temp = s_queue->head;
+    Socket* prev;
+    if(temp->next == NULL){
+        return;
+    }
+    while(temp->next != NULL){
+        prev = temp;
+        temp = temp->next;
+    }
+    prev->next = head;
+    s_queue->head = head->next;
+    s_queue->tail = head;
+    head->next = NULL;
 }
 
 int main(int argc, char* argv[]){
@@ -261,7 +265,7 @@ int main(int argc, char* argv[]){
     // Set Timer
     struct timeval timeout;
     timeout.tv_sec = TIMEOUT;
-    timeout.tv_usec = TIMEOUT;
+    timeout.tv_usec = 0;
     socks[no_clients] = listenfd;
     // Create FD list and add listening socket to it
     fd_set readfds;
@@ -300,10 +304,12 @@ int main(int argc, char* argv[]){
                         printf("Error message sending failed\n");
                         exit(1);
                     }
+                    removeSocket(s_queue->head->sock, s_queue);
                     // Remove socket and stuff here
                 }   
                 else 
                     resendPacket(s_queue->head);
+                    pushQueue(s_queue);
             }  
         }
         else if(response > 0){
@@ -358,7 +364,7 @@ int main(int argc, char* argv[]){
                 printf("FileSize is %d\n\n", node->fileSize);
                 printf("Start Transferring\n");
                 // Send first packet
-                sendPacket(node);
+                //sendPacket(node);
                 //Close the streams and open stuff.
                 memset(&si_other, 0, sizeof(si_other));
                 memset(listenfd_input, 0, sizeof(listenfd_input));
@@ -389,15 +395,18 @@ int main(int argc, char* argv[]){
                         }
                         else{
                             sendPacket(temp_sock);
+                            pushQueue(s_queue);
                         }
                     }
                     else{
                         resendPacket(temp_sock);
+                        pushQueue(s_queue);
                     }
                 }
                 else if(temp_sock->recv_buffer[1] == ERR){
                     // Resend previous packet;
                     resendPacket(temp_sock);
+                    pushQueue(s_queue);
                 }
                 else{
                     // Handle somehow? Not too sure
@@ -406,9 +415,10 @@ int main(int argc, char* argv[]){
                     memset(temp_sock->recv_buffer, 0, sizeof(temp_sock->recv_buffer));
             }
         }
-        if(s_queue->soc_count != 0){
-            timeout.tv_sec = 5.0 - (clock()-s_queue->head->sentAt)/CLOCKS_PER_SEC;
-            // printf("%li\n", timeout.tv_sec);
-        }
+        // if(s_queue->soc_count != 0){
+
+        //     timeout.tv_sec = TIMEOUT - (clock()-s_queue->head->sentAt)/CLOCKS_PER_SEC;
+        //     // printf("%li\n", timeout.tv_sec);
+        // }
     }
 }
