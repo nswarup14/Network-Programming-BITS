@@ -1,8 +1,3 @@
-// Gen questions to be clarified
-//  -> Should any buffer be flushed before new data comes?
-//  -> Clarify with Sankalp on the logic
-//  -> Port Number for every socket?
-//  -> Zero Size DATA packet
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -154,7 +149,6 @@ void addSocket(Socket* node, SocketQueue* s_queue){
 
 void substring(char s[], char sub[], int p, int l) {
    int c = 0;
-   
    while (c < l) {
       sub[c] = s[p+c-1];
       c++;
@@ -364,7 +358,7 @@ int main(int argc, char* argv[]){
                 printf("FileSize is %d\n\n", node->fileSize);
                 printf("Start Transferring\n");
                 // Send first packet
-                //sendPacket(node);
+                sendPacket(node);
                 //Close the streams and open stuff.
                 memset(&si_other, 0, sizeof(si_other));
                 memset(listenfd_input, 0, sizeof(listenfd_input));
@@ -415,10 +409,10 @@ int main(int argc, char* argv[]){
                     memset(temp_sock->recv_buffer, 0, sizeof(temp_sock->recv_buffer));
             }
         }
-        // if(s_queue->soc_count != 0){
-
-        //     timeout.tv_sec = TIMEOUT - (clock()-s_queue->head->sentAt)/CLOCKS_PER_SEC;
-        //     // printf("%li\n", timeout.tv_sec);
-        // }
+        if(s_queue->soc_count != 0){
+            //printf("yo\n");
+            timeout.tv_sec = TIMEOUT - (clock()-s_queue->head->sentAt)/CLOCKS_PER_SEC;
+            // printf("%li\n", timeout.tv_sec);
+        }
     }
 }
